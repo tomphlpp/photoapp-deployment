@@ -1,0 +1,67 @@
+# Stage 1: build the react piece
+FROM node:18-slim AS frontend-builder
+WORKDIR /app/react-client
+
+COPY react-client/package*.json ./
+
+# node dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+COPY react-client/ ./
+RUN npm run build
+
+# build the Flask backend
+FROM python:3.11-slim as builder
+
+# these are psychopg dependencies that requirements.txt wasn't picking up. this
+# command is a required do successfully build the container
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3-dev \
+    libpq-dev \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# this base image will be the final production image
+FROM python:3.11-slim
+
+#only runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# avoid running containers as root
+RUN useradd -m appuser
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+COPY . .
+COPY --from=frontend-builder /app/react-client/dist /app/react-client/dist
+
+RUN chown -R appuser:appuser /app
+USER appuser
+
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
+ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_RUN_PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+EXPOSE 8080
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--threads", "2", "app:app"]

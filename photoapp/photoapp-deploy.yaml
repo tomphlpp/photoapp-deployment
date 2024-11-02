@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: photoapp
+  namespace: photoapp
+  labels:
+    app: photoapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: photoapp
+  template:
+    metadata:
+      labels:
+        app: photoapp
+    spec:
+      containers:
+      - name: photoapp
+        image: harbor.wavl-lab.net/library/svanart-photoapp:prodv2
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DB_URL
+          valueFrom:
+            secretKeyRef:
+              name: photoapp-secrets
+              key: DB_URL
+        - name: FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: photoapp-secrets
+              key: FROM_EMAIL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: photoapp-secrets
+              key: JWT_SECRET
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: photoapp-secrets
+              key: SENDGRID_API_KEY
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20

@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingressClassName: nginx
+    kubernetes.io/ingress.class: nginx
+  labels:
+  name: photoapp-ingress
+  namespace: photoapp
+spec:
+  tls:
+  - hosts:
+    - photoapp.wavl-lab.net
+    secretName: photoapp-wavl-lab-net-tls
+  rules:
+  - host: photoapp.wavl-lab.net
+    http:
+      paths:
+      - backend:
+          service:
+            name: photoapp-service
+            port:
+              number: 80 
+        path: /
+        pathType: Prefix
